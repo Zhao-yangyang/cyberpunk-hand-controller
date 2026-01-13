@@ -310,11 +310,13 @@ class ParticleSystem {
         this.posArray = new Float32Array(this.count * 3);
         this.targetArray = new Float32Array(this.count * 3);
         this.colorArray = new Float32Array(this.count * 3);
+        this.targetColorArray = new Float32Array(this.count * 3); // New: Target colors
         this.bouncePhaseArray = new Float32Array(this.count);
 
         // Init
         for(let i=0; i<this.count; i++) {
             const i3 = i*3;
+            // ... (pos init)
             this.posArray[i3] = (Math.random()-0.5)*1000;
             this.posArray[i3+1] = (Math.random()-0.5)*1000;
             this.posArray[i3+2] = (Math.random()-0.5)*1000;
@@ -327,6 +329,11 @@ class ParticleSystem {
             this.colorArray[i3] = c.r;
             this.colorArray[i3+1] = c.g;
             this.colorArray[i3+2] = c.b;
+
+            // Init target color
+            this.targetColorArray[i3] = c.r;
+            this.targetColorArray[i3+1] = c.g;
+            this.targetColorArray[i3+2] = c.b;
 
             this.bouncePhaseArray[i] = Math.random() * Math.PI * 2;
         }
@@ -488,8 +495,12 @@ class ParticleSystem {
                     this.targetArray[i3+1] = p.y;
                     this.targetArray[i3+2] = p.z || 0;
 
-                    // If image mode, we might want to store per-particle color target too?
-                    // For now keeping single color unless explicit feature needed
+                    // Update Target Color if available (for Logo)
+                    if(p.c) {
+                        this.targetColorArray[i3] = p.c.r;
+                        this.targetColorArray[i3+1] = p.c.g;
+                        this.targetColorArray[i3+2] = p.c.b;
+                    }
                 } else {
                      this.targetArray[i3] = 0; this.targetArray[i3+1] = 0; this.targetArray[i3+2] = 0;
                 }
@@ -498,7 +509,15 @@ class ParticleSystem {
     }
 
     setColors(color) {
-        this.activeColor = color;
+        this.activeColor = color; // For global override
+        this.useGlobalColor = true;
+        // Update all targets to this global color
+        for(let i=0; i<this.count; i++) {
+            const i3 = i*3;
+            this.targetColorArray[i3] = color.r;
+            this.targetColorArray[i3+1] = color.g;
+            this.targetColorArray[i3+2] = color.b;
+        }
     }
 
     update(time, handState) {
@@ -507,6 +526,7 @@ class ParticleSystem {
 
         for(let i=0; i<this.count; i++) {
             const i3 = i*3;
+            // ... (physics)
             let px = positions[i3];
             let py = positions[i3+1];
             let pz = positions[i3+2];
@@ -561,10 +581,15 @@ class ParticleSystem {
 
             positions[i3] = px; positions[i3+1] = py; positions[i3+2] = pz;
 
-            // --- COLOR ---
-            colors[i3] += (this.activeColor.r - colors[i3]) * 0.1;
-            colors[i3+1] += (this.activeColor.g - colors[i3+1]) * 0.1;
-            colors[i3+2] += (this.activeColor.b - colors[i3+2]) * 0.1;
+            // --- COLOR LERP ---
+            // Lerp towards targetColorArray
+            const tr = this.targetColorArray[i3];
+            const tg = this.targetColorArray[i3+1];
+            const tb = this.targetColorArray[i3+2];
+
+            colors[i3] += (tr - colors[i3]) * 0.1;
+            colors[i3+1] += (tg - colors[i3+1]) * 0.1;
+            colors[i3+2] += (tb - colors[i3+2]) * 0.1;
         }
 
         this.geometry.attributes.position.needsUpdate = true;
