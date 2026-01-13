@@ -75,6 +75,76 @@
             font-size: 18px;
         }
 
+        /* Settings Panel */
+        #settings-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid #0ff;
+            color: #0ff;
+            padding: 10px 20px;
+            font-family: 'Orbitron', sans-serif;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        #settings-btn:hover {
+            background: rgba(0, 255, 255, 0.3);
+            box-shadow: 0 0 15px #0ff;
+        }
+
+        #settings-panel {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #0ff;
+            padding: 20px;
+            z-index: 20;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+            text-align: center;
+        }
+
+        .setting-row {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .setting-label {
+            display: block;
+            color: #0ff;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .setting-input {
+            width: 100%;
+            background: rgba(0, 255, 255, 0.05);
+            border: 1px solid #0ff;
+            color: #fff;
+            padding: 8px;
+            font-family: 'Orbitron', sans-serif;
+            box-sizing: border-box;
+        }
+
+        .close-btn {
+            margin-top: 10px;
+            background: #0ff;
+            color: #000;
+            border: none;
+            padding: 8px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: 'Orbitron', sans-serif;
+        }
+
         /* Video Background */
         #input-video {
             display: block;
@@ -130,6 +200,36 @@
         <span class="hud-value" id="right-status">OFFLINE</span>
     </div>
 
+    <!-- Settings Button -->
+    <button id="settings-btn" onclick="toggleSettings()">CONFIGURE COMMANDS</button>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel">
+        <h3 style="color: #0ff; margin-top: 0;">COMMAND CONFIG</h3>
+
+        <div class="setting-row">
+            <span class="setting-label">1 FINGER (BLUE)</span>
+            <input type="text" id="cmd-1" class="setting-input" value="Hello" oninput="updateCommand(1, this.value)">
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">2 FINGERS (YELLOW)</span>
+            <input type="text" id="cmd-2" class="setting-input" value="Gemini3" oninput="updateCommand(2, this.value)">
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">3 FINGERS (PINK)</span>
+            <input type="text" id="cmd-3" class="setting-input" value="非常好用" oninput="updateCommand(3, this.value)">
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">4 FINGERS (GREEN)</span>
+            <input type="text" id="cmd-4" class="setting-input" value="再见" oninput="updateCommand(4, this.value)">
+        </div>
+
+        <button class="close-btn" onclick="toggleSettings()">CLOSE</button>
+    </div>
+
     <video id="input-video"></video>
     <canvas id="text-canvas"></canvas>
 
@@ -156,7 +256,13 @@ const CONFIG = {
     },
     cameraZ: 600,
     canvasWidth: 800, // For text generation resolution
-    canvasHeight: 600
+    canvasHeight: 600,
+    commands: {
+        1: "Hello",
+        2: "Gemini3",
+        3: "非常好用",
+        4: "再见"
+    }
 };
 
 // --- GLOBAL STATE ---
@@ -495,16 +601,16 @@ function onResults(results) {
                     state.leftHand.mode = 'IDLE';
                 } else if (fingers === 1) {
                     state.leftHand.mode = 'HELLO';
-                    modeText = 'HELLO';
+                    modeText = CONFIG.commands[1];
                 } else if (fingers === 2) {
                     state.leftHand.mode = 'GEMINI';
-                    modeText = 'GEMINI3';
+                    modeText = CONFIG.commands[2];
                 } else if (fingers === 3) {
                     state.leftHand.mode = 'USEFUL';
-                    modeText = 'USEFUL';
+                    modeText = CONFIG.commands[3];
                 } else if (fingers === 4) {
                     state.leftHand.mode = 'BYE';
-                    modeText = 'GOODBYE';
+                    modeText = CONFIG.commands[4];
                 } else if (fingers === 5) {
                     state.leftHand.mode = 'CATCH';
                     modeText = 'CATCH MODE';
@@ -556,19 +662,19 @@ function updateLogic() {
     if (leftMode !== previousLeftMode) {
         switch(leftMode) {
             case 'HELLO':
-                updateParticlesTarget('TEXT', 'Hello');
+                updateParticlesTarget('TEXT', CONFIG.commands[1]);
                 updateColors(CONFIG.colors.blue);
                 break;
             case 'GEMINI':
-                updateParticlesTarget('TEXT', 'Gemini3');
+                updateParticlesTarget('TEXT', CONFIG.commands[2]);
                 updateColors(CONFIG.colors.yellow);
                 break;
             case 'USEFUL':
-                updateParticlesTarget('TEXT', '非常好用');
+                updateParticlesTarget('TEXT', CONFIG.commands[3]);
                 updateColors(CONFIG.colors.pink);
                 break;
             case 'BYE':
-                updateParticlesTarget('TEXT', '再见');
+                updateParticlesTarget('TEXT', CONFIG.commands[4]);
                 updateColors(CONFIG.colors.green);
                 break;
             case 'CATCH':
@@ -751,6 +857,24 @@ window.addEventListener('resize', () => {
 
 // Start Animation
 animate();
+
+// --- SETTINGS UI LOGIC ---
+function toggleSettings() {
+    const panel = document.getElementById('settings-panel');
+    if (panel.style.display === 'block') {
+        panel.style.display = 'none';
+    } else {
+        panel.style.display = 'block';
+    }
+}
+
+function updateCommand(finger, value) {
+    CONFIG.commands[finger] = value;
+    // Force update if currently in that state
+    if (state.leftHand.mode !== 'IDLE' && state.leftHand.fingers == finger) {
+        updateParticlesTarget('TEXT', value);
+    }
+}
 
 </script>
 </body>
