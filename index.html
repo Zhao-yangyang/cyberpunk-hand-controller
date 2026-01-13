@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk Particle Hand Controller</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Orbitron', sans-serif;
+            color: #0ff;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Vignette and Grid overlay */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            background:
+                radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 100%),
+                repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0, 255, 255, 0.03) 2px, transparent 3px);
+            background-size: 100% 100%, 100% 4px;
+            animation: scanline 6s linear infinite;
+        }
+
+        @keyframes scanline {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100%; }
+        }
+
+        /* HUD Elements */
+        .hud {
+            position: absolute;
+            z-index: 3;
+            padding: 20px;
+            font-size: 14px;
+            text-shadow: 0 0 5px #0ff;
+            pointer-events: none;
+        }
+
+        .top-left { top: 0; left: 0; }
+        .top-right { top: 0; right: 0; text-align: right; }
+        .bottom-left { bottom: 0; left: 0; }
+        .bottom-right { bottom: 0; right: 0; text-align: right; }
+
+        .hud-label {
+            color: #0ff;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .hud-value {
+            color: #fff;
+            font-size: 18px;
+        }
+
+        /* Hidden elements */
+        #input-video {
+            display: none;
+        }
+        #text-canvas {
+            display: none;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0ff;
+            font-size: 24px;
+            z-index: 10;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="loading" id="loading">INITIALIZING SYSTEM...<br>Please allow camera access</div>
+
+    <div id="canvas-container"></div>
+    <div class="overlay"></div>
+
+    <!-- HUD -->
+    <div class="hud top-left">
+        <span class="hud-label">FPS</span>
+        <span class="hud-value" id="fps">0</span>
+    </div>
+    <div class="hud top-right">
+        <span class="hud-label">PARTICLES</span>
+        <span class="hud-value">12,000</span>
+    </div>
+    <div class="hud bottom-left">
+        <span class="hud-label">LEFT HAND</span>
+        <span class="hud-value" id="left-status">OFFLINE</span>
+    </div>
+    <div class="hud bottom-right">
+        <span class="hud-label">RIGHT HAND</span>
+        <span class="hud-value" id="right-status">OFFLINE</span>
+    </div>
+
+    <video id="input-video"></video>
+    <canvas id="text-canvas"></canvas>
+
+<script>
+/**
+ * CYBERPUNK PARTICLE SYSTEM
+ * Single File Implementation
+ */
+
+// --- CONFIGURATION ---
+const CONFIG = {
+    particleCount: 12000,
+    particleSize: 2.4,
+    lerpSpeed: 0.16,
+    repulsionRadius: 80,
+    repulsionForce: 5.0,
+    colors: {
+        blue: new THREE.Color(0x00FFFF),
+        yellow: new THREE.Color(0xFFFF00),
+        pink: new THREE.Color(0xFF00FF),
+        green: new THREE.Color(0x00FF88),
+        orange: new THREE.Color(0xFFA500),
+        white: new THREE.Color(0xFFFFFF)
+    },
+    cameraZ: 600,
+    canvasWidth: 800, // For text generation resolution
+    canvasHeight: 600
+};
+
+// --- GLOBAL STATE ---
+const state = {
+    leftHand: {
+        present: false,
+        fingers: 0,
+        position: new THREE.Vector3(), // Palm center
+        mode: 'IDLE' // IDLE, HELLO, GEMINI, USEFUL, BYE, CATCH
+    },
+    rightHand: {
+        present: false,
+        fingers: 0,
+        indexTip: new THREE.Vector3(),
+        position: new THREE.Vector3(), // Palm center
+        mode: 'POINT' // POINT, NEBULA
+    },
+    isUltimateMode: false,
+    time: 0,
+    activeColor: CONFIG.colors.blue
+};
+
+// --- THREE.JS SETUP ---
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.z = CONFIG.cameraZ;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+// --- PARTICLE SYSTEM ---
+const particlesGeometry = new THREE.BufferGeometry();
+const posArray = new Float32Array(CONFIG.particleCount * 3);
+const targetArray = new Float32Array(CONFIG.particleCount * 3);
+const colorArray = new Float32Array(CONFIG.particleCount * 3);
+// For bouncing effect in ultimate mode
+const velocityArray = new Float32Array(CONFIG.particleCount * 3);
+const bouncePhaseArray = new Float32Array(CONFIG.particleCount); // Random phase for bouncing
+
+for (let i = 0; i < CONFIG.particleCount; i++) {
+    // Init at random positions
+    posArray[i * 3] = (Math.random() - 0.5) * 1000;
+    posArray[i * 3 + 1] = (Math.random() - 0.5) * 1000;
+    posArray[i * 3 + 2] = (Math.random() - 0.5) * 1000;
+
+    targetArray[i * 3] = posArray[i * 3];
+    targetArray[i * 3 + 1] = posArray[i * 3 + 1];
+    targetArray[i * 3 + 2] = posArray[i * 3 + 2];
+
+    const c = CONFIG.colors.blue;
+    colorArray[i * 3] = c.r;
+    colorArray[i * 3 + 1] = c.g;
+    colorArray[i * 3 + 2] = c.b;
+
+    velocityArray[i*3] = 0;
+    velocityArray[i*3+1] = 0;
+    velocityArray[i*3+2] = 0;
+
+    bouncePhaseArray[i] = Math.random() * Math.PI * 2;
+}
+
+particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+
+// Procedural Circle Texture
+const getSprite = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+    gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 32, 32);
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+};
+
+const particlesMaterial = new THREE.PointsMaterial({
+    size: CONFIG.particleSize,
+    map: getSprite(),
+    transparent: true,
+    opacity: 0.9,
+    vertexColors: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+});
+
+const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+scene.add(particlesMesh);
+
+// --- SHAPE GENERATION UTILS ---
+
+// 1. Text Generation
+const textCanvas = document.getElementById('text-canvas');
+textCanvas.width = CONFIG.canvasWidth;
+textCanvas.height = CONFIG.canvasHeight;
+const ctx = textCanvas.getContext('2d');
+
+function generateTextTargets(text) {
+    ctx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+    ctx.fillStyle = '#000'; // BG
+    ctx.fillRect(0, 0, textCanvas.width, textCanvas.height);
+
+    ctx.font = 'bold 75px "Orbitron", "Courier New", monospace';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Split text into lines if needed or scale font, simple implementation for now
+    const lines = text.split('\n'); // Not really using newlines in prompt but good for safety
+    const lineHeight = 90;
+    const startY = (textCanvas.height - (lines.length - 1) * lineHeight) / 2;
+
+    lines.forEach((line, i) => {
+        ctx.fillText(line, textCanvas.width / 2, startY + i * lineHeight);
+    });
+
+    const imageData = ctx.getImageData(0, 0, textCanvas.width, textCanvas.height);
+    const data = imageData.data;
+
+    let validPixels = [];
+    for (let y = 0; y < textCanvas.height; y += 3) { // Step to reduce density
+        for (let x = 0; x < textCanvas.width; x += 3) {
+            const index = (y * textCanvas.width + x) * 4;
+            if (data[index] > 128) { // White pixel
+                // Map to 3D space.
+                // Canvas 0,0 is Top-Left. 3D 0,0 is Center.
+                const px = (x - textCanvas.width / 2) * 1.5;
+                const py = -(y - textCanvas.height / 2) * 1.5; // Invert Y
+                validPixels.push({ x: px, y: py, z: 0 });
+            }
+        }
+    }
+
+    return validPixels;
+}
+
+// 2. Basketball Generation (Fibonacci Sphere with "cuts")
+function generateBasketballTargets() {
+    const points = [];
+    const radius = 100;
+    const phi = Math.PI * (3 - Math.sqrt(5)); // Golden angle
+
+    // We need roughly 12000 points, but let's generate enough to fill shape
+    // The main loop in update will map mod particleCount
+    const count = 6000;
+
+    for (let i = 0; i < count; i++) {
+        const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
+        const r = Math.sqrt(1 - y * y); // Radius at y
+
+        const theta = phi * i; // Golden angle increment
+
+        const x = Math.cos(theta) * r;
+        const z = Math.sin(theta) * r;
+
+        // Apply masking for "black lines"
+        // 1. One great circle (X-Z plane) -> y approx 0
+        // 2. One great circle (Y-Z plane) -> x approx 0
+        // 3. The sinusoidal curve is complex, let's approximate with a simple cross + band
+
+        const p = new THREE.Vector3(x * radius, y * radius, z * radius);
+
+        // Simple "Black Lines" logic: exclude points near specific geometric bands
+        // Standard basketball has one horizontal line and one vertical(ish) line + curves
+        // Lets just do a stylized version:
+        // Exclude if close to X=0 plane
+        // Exclude if close to Z=0 plane (rotated)
+
+        const lineThickness = 0.08;
+
+        // Line 1: x = 0
+        if (Math.abs(x) < lineThickness) continue;
+
+        // Line 2: Circle on ZY plane?
+        // Let's perform a generic "rib" check
+        // Sphere has ribs.
+
+        // Let's do a simple sine wave strip around sphere
+        // Check distance from a sine curve wrapped around sphere
+        // z = sin(x * freq) ... hard on sphere.
+
+        // Alternative: Just simple geometric exclusions for the "Cross" look
+        if (Math.abs(z) < lineThickness) continue;
+
+        points.push(p);
+    }
+    return points;
+}
+
+const basketballPoints = generateBasketballTargets();
+
+// --- LOGIC FUNCTIONS ---
+
+function updateParticlesTarget(mode, text = '') {
+    let validPoints = [];
+
+    if (mode === 'TEXT') {
+        validPoints = generateTextTargets(text);
+    } else if (mode === 'BASKETBALL') {
+        validPoints = basketballPoints;
+    }
+
+    // Assign targets
+    for (let i = 0; i < CONFIG.particleCount; i++) {
+        let p;
+        if (mode === 'NEBULA') {
+            // Random space
+            const range = 800;
+            targetArray[i * 3] = (Math.random() - 0.5) * range;
+            targetArray[i * 3 + 1] = (Math.random() - 0.5) * range;
+            targetArray[i * 3 + 2] = (Math.random() - 0.5) * range;
+        } else {
+            // Map validPoints to particles repeatedly
+            if (validPoints.length > 0) {
+                p = validPoints[i % validPoints.length];
+                targetArray[i * 3] = p.x;
+                targetArray[i * 3 + 1] = p.y;
+                targetArray[i * 3 + 2] = p.z || 0;
+            } else {
+                // Fallback (center)
+                targetArray[i * 3] = 0;
+                targetArray[i * 3 + 1] = 0;
+                targetArray[i * 3 + 2] = 0;
+            }
+        }
+    }
+}
+
+function updateColors(color) {
+    state.activeColor = color;
+    // We update the buffer in the animation loop usually, but can do gradual transition
+    // For instant switch (requested logic):
+    // Actually the request implies "Color: Neon Blue", etc.
+    // We will lerp colors in update loop for smoothness or set instantly?
+    // Let's set target color state and lerp in loop.
+}
+
+// --- MEDIAPIPE HANDS SETUP ---
+
+const videoElement = document.getElementById('input-video');
+
+function onResults(results) {
+    // Reset Hand States
+    state.leftHand.present = false;
+    state.rightHand.present = false;
+
+    // Process Hands
+    if (results.multiHandLandmarks && results.multiHandedness) {
+        for (let index = 0; index < results.multiHandLandmarks.length; index++) {
+            const classification = results.multiHandedness[index];
+            const isRightHand = classification.label === 'Right'; // MediaPipe reverses?
+            // Note: Camera is mirrored usually?
+            // "Right" label in MediaPipe usually corresponds to user's left hand in mirrored view.
+            // But let's assume standard webcam mirror:
+            // If I raise my right hand, it appears on the right side of the screen (mirror).
+            // MediaPipe 'Right' label usually means the hand that IS the right hand.
+            // Let's map strictly to logic requested.
+
+            const landmarks = results.multiHandLandmarks[index];
+
+            // Count fingers
+            let fingers = 0;
+            // Thumb (4 right of 3?) - simple check x diff
+            // For general robustness, use vector angle or simple x comparison relative to handedness
+
+            // Simple logic: Tip y < PIP y (for fingers 2-5)
+            // Thumb: check x distance
+
+            // Index (8 vs 6), Middle (12 vs 10), Ring (16 vs 14), Pinky (20 vs 18)
+            if (landmarks[8].y < landmarks[6].y) fingers++;
+            if (landmarks[12].y < landmarks[10].y) fingers++;
+            if (landmarks[16].y < landmarks[14].y) fingers++;
+            if (landmarks[20].y < landmarks[18].y) fingers++;
+
+            // Thumb
+            // Right Hand: Thumb is left of wrist?
+            // Let's use a simpler heuristic for thumb: distance from wrist vs index knuckle?
+            // Or just x comparison.
+            // For Right hand, thumb tip (4) < IP (3). x increases to left in MP coords (0-1)
+            // Let's just assume thumb is extended if tip is far from palm center
+
+            // Rough Thumb check
+            const dx = landmarks[4].x - landmarks[3].x;
+            if (isRightHand) {
+                if (dx < -0.02) fingers++; // Adjust based on real world
+            } else {
+                if (dx > 0.02) fingers++;
+            }
+
+            // 3D Position mapping (0-1) to World Coords
+            // Three.js Scene is approx -400 to 400 x, -300 to 300 y
+            // MP: x(0-1), y(0-1).
+            // Invert x for mirror effect
+            const wx = (1 - landmarks[9].x - 0.5) * CONFIG.canvasWidth * 1.5;
+            const wy = -(landmarks[9].y - 0.5) * CONFIG.canvasHeight * 1.5;
+            const palmPos = new THREE.Vector3(wx, wy, 0);
+
+            if (isRightHand) {
+                // Logic says "Right Hand (Physics Interactor)"
+                // But in mirror mode, my physical Right hand is on the right side of screen?
+                // MediaPipe says "Right" for the hand that is the user's Right hand.
+                state.rightHand.present = true;
+                state.rightHand.fingers = fingers;
+                state.rightHand.position.copy(palmPos);
+
+                // Track Index Tip (Landmark 8)
+                const tipX = (1 - landmarks[8].x - 0.5) * CONFIG.canvasWidth * 1.5;
+                const tipY = -(landmarks[8].y - 0.5) * CONFIG.canvasHeight * 1.5;
+                state.rightHand.indexTip.set(tipX, tipY, 0);
+
+                // Mode State
+                if (fingers === 5) {
+                    state.rightHand.mode = 'NEBULA';
+                } else {
+                    state.rightHand.mode = 'POINT';
+                }
+
+                document.getElementById('right-status').innerText = `${state.rightHand.mode} (${fingers})`;
+
+            } else {
+                // Left Hand (Command Controller)
+                state.leftHand.present = true;
+                state.leftHand.fingers = fingers;
+                state.leftHand.position.copy(palmPos);
+
+                let modeText = 'IDLE';
+                // Switch Logic
+                if (fingers === 0) {
+                    state.leftHand.mode = 'IDLE';
+                } else if (fingers === 1) {
+                    state.leftHand.mode = 'HELLO';
+                    modeText = 'HELLO';
+                } else if (fingers === 2) {
+                    state.leftHand.mode = 'GEMINI';
+                    modeText = 'GEMINI3';
+                } else if (fingers === 3) {
+                    state.leftHand.mode = 'USEFUL';
+                    modeText = 'USEFUL';
+                } else if (fingers === 4) {
+                    state.leftHand.mode = 'BYE';
+                    modeText = 'GOODBYE';
+                } else if (fingers === 5) {
+                    state.leftHand.mode = 'CATCH';
+                    modeText = 'CATCH MODE';
+                }
+
+                document.getElementById('left-status').innerText = `${modeText} (${fingers})`;
+            }
+        }
+    }
+}
+
+const hands = new Hands({locateFile: (file) => {
+    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+}});
+hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
+hands.onResults(onResults);
+
+// Setup Camera
+const cameraUtils = new Camera(videoElement, {
+    onFrame: async () => {
+        await hands.send({image: videoElement});
+    },
+    width: 640,
+    height: 480
+});
+cameraUtils.start().then(() => {
+    document.getElementById('loading').style.display = 'none';
+});
+
+// --- MAIN LOOP ---
+
+let previousLeftMode = 'IDLE';
+let previousRightMode = 'POINT';
+let isUltimate = false;
+
+function updateLogic() {
+    state.time += 0.01;
+
+    // 1. Detect Modes & Switch Targets
+
+    // Left Hand Trigger
+    const leftMode = state.leftHand.present ? state.leftHand.mode : 'IDLE';
+
+    if (leftMode !== previousLeftMode) {
+        switch(leftMode) {
+            case 'HELLO':
+                updateParticlesTarget('TEXT', 'Hello');
+                updateColors(CONFIG.colors.blue);
+                break;
+            case 'GEMINI':
+                updateParticlesTarget('TEXT', 'Gemini3');
+                updateColors(CONFIG.colors.yellow);
+                break;
+            case 'USEFUL':
+                updateParticlesTarget('TEXT', '非常好用');
+                updateColors(CONFIG.colors.pink);
+                break;
+            case 'BYE':
+                updateParticlesTarget('TEXT', '再见');
+                updateColors(CONFIG.colors.green);
+                break;
+            case 'CATCH':
+                // Catch mode acts as destination container
+                // We keep targets as is? Or clear them?
+                // Logic says: "Enter Catch Mode (acts as a destination container)"
+                // This implies it's ready for Ultimate.
+                // Visually maybe show a ring or empty?
+                // Let's keep previous text but change color to White? Or keep logic simple.
+                // Let's set target to a small sphere in hand?
+                // Description implies Catch Mode is a state for Dual Hand Combo.
+                break;
+            case 'IDLE':
+                // Maybe disperse or keep last?
+                break;
+        }
+        previousLeftMode = leftMode;
+    }
+
+    // Right Hand Trigger
+    const rightMode = state.rightHand.present ? state.rightHand.mode : 'POINT';
+    if (rightMode !== previousRightMode) {
+        if (rightMode === 'NEBULA') {
+            updateParticlesTarget('NEBULA');
+            // Nebula interaction is ripple
+        } else {
+            // If returning to Point, do we restore text?
+            // If Left hand is still holding a state, restore it.
+            if (['HELLO', 'GEMINI', 'USEFUL', 'BYE'].includes(state.leftHand.mode)) {
+                // Re-trigger left hand logic
+                previousLeftMode = 'FORCE_UPDATE'; // Hack to re-trigger
+            }
+        }
+        previousRightMode = rightMode;
+    }
+
+    // Ultimate Trigger
+    // Condition: Right Open (Nebula) AND Left Open (Catch)
+    if (state.rightHand.present && state.rightHand.mode === 'NEBULA' &&
+        state.leftHand.present && state.leftHand.mode === 'CATCH') {
+
+        if (!state.isUltimateMode) {
+            state.isUltimateMode = true;
+            // Generate Basketball Targets once?
+            // Actually we just map basketball points in real-time to Left Hand position
+            updateColors(CONFIG.colors.orange);
+        }
+    } else {
+        state.isUltimateMode = false;
+    }
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Update FPS
+    document.getElementById('fps').innerText = Math.round(1 / (performance.now() - (animate.lastTime || performance.now())) * 1000) || 60;
+    animate.lastTime = performance.now();
+
+    updateLogic();
+
+    const positions = particlesGeometry.attributes.position.array;
+    const colors = particlesGeometry.attributes.color.array;
+
+    // Physics Loop
+    for (let i = 0; i < CONFIG.particleCount; i++) {
+        const ix = i * 3;
+        const iy = i * 3 + 1;
+        const iz = i * 3 + 2;
+
+        let px = positions[ix];
+        let py = positions[iy];
+        let pz = positions[iz];
+
+        let tx, ty, tz;
+
+        // TARGET CALCULATION
+        if (state.isUltimateMode) {
+            // ULTIMATE: Target is Basketball shape relative to Left Hand Position
+            const p = basketballPoints[i % basketballPoints.length];
+            // Rotate the ball
+            const angle = state.time * 2;
+            const rx = p.x * Math.cos(angle) - p.z * Math.sin(angle);
+            const rz = p.x * Math.sin(angle) + p.z * Math.cos(angle);
+
+            tx = state.leftHand.position.x + rx;
+            ty = state.leftHand.position.y + p.y;
+            tz = state.leftHand.position.z + rz;
+
+            // Bouncing Trajectory Logic
+            // "High-frequency Y-axis sine wave" looking like bouncing beads
+            // Add a sine wave offset to the path?
+            // Or act as velocity?
+            // The prompt says "Particles must fly towards... with Bouncing/Jumping trajectory"
+            // We can add a sine wave to the current position's Y based on distance to target?
+
+            // Simpler visual: Add sine wave to Y based on time + particle index
+            const bounce = Math.abs(Math.sin(state.time * 5 + bouncePhaseArray[i])) * 50;
+            ty += bounce;
+
+        } else if (state.rightHand.mode === 'NEBULA') {
+            // NEBULA: Target is random (set in updateParticlesTarget)
+            // But we add Ripple Effect from Right Hand
+            tx = targetArray[ix];
+            ty = targetArray[iy];
+            tz = targetArray[iz];
+
+            if (state.rightHand.present) {
+                const dist = Math.sqrt(
+                    Math.pow(px - state.rightHand.indexTip.x, 2) +
+                    Math.pow(py - state.rightHand.indexTip.y, 2) +
+                    Math.pow(pz - 0, 2) // Hand assumed at z=0 for interaction
+                );
+
+                // Sine wave ripple
+                const ripple = Math.sin(dist * 0.05 - state.time * 10) * 20;
+                pz += ripple; // Displace in Z
+            }
+        } else {
+            // STANDARD (Text/Idle)
+            tx = targetArray[ix];
+            ty = targetArray[iy];
+            tz = targetArray[iz];
+        }
+
+        // LERP PHYSICS
+        // Move current pos towards target
+        px += (tx - px) * CONFIG.lerpSpeed;
+        py += (ty - py) * CONFIG.lerpSpeed;
+        pz += (tz - pz) * CONFIG.lerpSpeed;
+
+        // RIGHT HAND INTERACTION (REPULSION) - State A
+        // "Constraint: Pure planar repulsion (XY axis). Do NOT apply any Z-axis bulge"
+        if (state.rightHand.present && state.rightHand.mode === 'POINT' && !state.isUltimateMode) {
+            const dx = px - state.rightHand.indexTip.x;
+            const dy = py - state.rightHand.indexTip.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < CONFIG.repulsionRadius) {
+                const force = (CONFIG.repulsionRadius - dist) * CONFIG.repulsionForce;
+                const angle = Math.atan2(dy, dx);
+                px += Math.cos(angle) * force;
+                py += Math.sin(angle) * force;
+                // No Z change
+            }
+        }
+
+        positions[ix] = px;
+        positions[iy] = py;
+        positions[iz] = pz;
+
+        // COLOR LERP
+        // Smoothly transition color to activeColor
+        const cr = colors[ix];
+        const cg = colors[iy];
+        const cb = colors[iz];
+
+        colors[ix] += (state.activeColor.r - cr) * 0.1;
+        colors[iy] += (state.activeColor.g - cg) * 0.1;
+        colors[iz] += (state.activeColor.b - cb) * 0.1;
+    }
+
+    particlesGeometry.attributes.position.needsUpdate = true;
+    particlesGeometry.attributes.color.needsUpdate = true;
+
+    // Slight camera drift for liveliness
+    camera.position.x += (state.rightHand.position.x * 0.05 - camera.position.x) * 0.05;
+    camera.position.y += (state.rightHand.position.y * 0.05 - camera.position.y) * 0.05;
+    camera.lookAt(scene.position);
+
+    renderer.render(scene, camera);
+}
+
+// Handle Window Resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Start Animation
+animate();
+
+</script>
+</body>
+</html>
