@@ -3,175 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cyberpunk Particle Hand Controller</title>
+    <title>Cyber-Event Toolkit</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #000;
-            font-family: 'Orbitron', sans-serif;
-            color: #0ff;
-        }
-
-        #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-
-        /* Vignette and Grid overlay */
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Orbitron', sans-serif; color: #0ff; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         .overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 2;
-            background:
-                radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 100%),
-                repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0, 255, 255, 0.03) 2px, transparent 3px);
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;
+            background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 100%),
+                        repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0, 255, 255, 0.03) 2px, transparent 3px);
             background-size: 100% 100%, 100% 4px;
             animation: scanline 6s linear infinite;
         }
+        @keyframes scanline { 0% { background-position: 0 0; } 100% { background-position: 0 100%; } }
 
-        @keyframes scanline {
-            0% { background-position: 0 0; }
-            100% { background-position: 0 100%; }
-        }
-
-        /* HUD Elements */
-        .hud {
-            position: absolute;
-            z-index: 3;
-            padding: 20px;
-            font-size: 14px;
-            text-shadow: 0 0 5px #0ff;
-            pointer-events: none;
-        }
-
+        /* UI Elements */
+        .hud { position: absolute; z-index: 3; padding: 20px; font-size: 14px; text-shadow: 0 0 5px #0ff; pointer-events: none; }
         .top-left { top: 0; left: 0; }
         .top-right { top: 0; right: 0; text-align: right; }
         .bottom-left { bottom: 0; left: 0; }
         .bottom-right { bottom: 0; right: 0; text-align: right; }
+        .hud-label { color: #0ff; font-weight: bold; display: block; margin-bottom: 5px; }
+        .hud-value { color: #fff; font-size: 18px; }
 
-        .hud-label {
-            color: #0ff;
-            font-weight: bold;
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        .hud-value {
-            color: #fff;
-            font-size: 18px;
-        }
-
-        /* Settings Panel */
-        #settings-btn {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            background: rgba(0, 255, 255, 0.1);
-            border: 1px solid #0ff;
-            color: #0ff;
-            padding: 10px 20px;
-            font-family: 'Orbitron', sans-serif;
-            cursor: pointer;
-            text-transform: uppercase;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-        #settings-btn:hover {
-            background: rgba(0, 255, 255, 0.3);
-            box-shadow: 0 0 15px #0ff;
-        }
-
-        #settings-panel {
+        /* Panel Container */
+        #control-panel {
             display: none;
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 300px;
-            background: rgba(0, 0, 0, 0.9);
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 600px; height: 500px;
+            background: rgba(0, 10, 20, 0.95);
             border: 1px solid #0ff;
-            padding: 20px;
-            z-index: 20;
             box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
-            text-align: center;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
         }
 
-        .setting-row {
-            margin-bottom: 15px;
-            text-align: left;
+        .panel-header { display: flex; border-bottom: 1px solid #0ff; }
+        .tab-btn {
+            flex: 1; background: transparent; border: none; color: #0ff; padding: 15px;
+            font-family: 'Orbitron', sans-serif; cursor: pointer; font-weight: bold;
+            transition: background 0.3s;
         }
+        .tab-btn:hover { background: rgba(0, 255, 255, 0.1); }
+        .tab-btn.active { background: rgba(0, 255, 255, 0.3); color: #fff; }
 
-        .setting-label {
-            display: block;
-            color: #0ff;
-            font-size: 12px;
-            margin-bottom: 5px;
+        .panel-content { flex: 1; padding: 20px; overflow-y: auto; text-align: left; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .setting-row { margin-bottom: 15px; }
+        .setting-label { display: block; color: #0ff; font-size: 12px; margin-bottom: 5px; }
+        .setting-input, .setting-textarea {
+            width: 100%; background: rgba(0, 255, 255, 0.05); border: 1px solid #0ff;
+            color: #fff; padding: 8px; font-family: 'Orbitron', sans-serif; box-sizing: border-box;
         }
+        .setting-textarea { height: 100px; resize: vertical; }
 
-        .setting-input {
-            width: 100%;
-            background: rgba(0, 255, 255, 0.05);
-            border: 1px solid #0ff;
-            color: #fff;
-            padding: 8px;
-            font-family: 'Orbitron', sans-serif;
-            box-sizing: border-box;
+        #toggle-panel-btn {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 10; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff;
+            color: #0ff; padding: 10px 20px; font-family: 'Orbitron', sans-serif;
+            cursor: pointer; text-transform: uppercase; font-weight: bold;
         }
+        #toggle-panel-btn:hover { background: rgba(0, 255, 255, 0.3); box-shadow: 0 0 15px #0ff; }
 
-        .close-btn {
-            margin-top: 10px;
-            background: #0ff;
-            color: #000;
-            border: none;
-            padding: 8px 20px;
-            font-weight: bold;
-            cursor: pointer;
-            font-family: 'Orbitron', sans-serif;
-        }
-
-        /* Video Background */
         #input-video {
-            display: block;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 0;
-            transform: scaleX(-1); /* Mirror to match interaction */
-            filter: brightness(0.25) contrast(1.1); /* Mask-like dark filter to make particles pop */
+            display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: 0; transform: scaleX(-1);
+            filter: brightness(0.25) contrast(1.1);
         }
-
-        #text-canvas {
-            display: none;
-        }
-
+        #text-canvas, #image-canvas { display: none; }
         .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #0ff;
-            font-size: 24px;
-            z-index: 10;
-            text-align: center;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #0ff; font-size: 24px; z-index: 10; text-align: center;
+        }
+
+        .mode-indicator {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            color: #fff; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #0ff; z-index: 5;
+        }
+        .keyboard-hint {
+            position: absolute; bottom: 20px; right: 20px; text-align: right;
+            color: rgba(0, 255, 255, 0.7); font-size: 12px; z-index: 5; pointer-events: none;
         }
     </style>
 </head>
@@ -181,700 +100,732 @@
 
     <div id="canvas-container"></div>
     <div class="overlay"></div>
+    <div class="mode-indicator" id="mode-display">MODE: FREE FLOW</div>
+    <div class="keyboard-hint" id="key-hints">
+        [TAB] Settings | [SPACE] Spin | [ENTER] Reveal
+    </div>
 
     <!-- HUD -->
     <div class="hud top-left">
-        <span class="hud-label">FPS</span>
-        <span class="hud-value" id="fps">0</span>
+        <span class="hud-label">FPS</span><span class="hud-value" id="fps">0</span>
     </div>
     <div class="hud top-right">
-        <span class="hud-label">PARTICLES</span>
-        <span class="hud-value">12,000</span>
+        <span class="hud-label">PARTICLES</span><span class="hud-value">12,000</span>
     </div>
     <div class="hud bottom-left">
-        <span class="hud-label">LEFT HAND</span>
-        <span class="hud-value" id="left-status">OFFLINE</span>
+        <span class="hud-label">LEFT HAND</span><span class="hud-value" id="left-status">OFFLINE</span>
     </div>
     <div class="hud bottom-right">
-        <span class="hud-label">RIGHT HAND</span>
-        <span class="hud-value" id="right-status">OFFLINE</span>
+        <span class="hud-label">RIGHT HAND</span><span class="hud-value" id="right-status">OFFLINE</span>
     </div>
 
-    <!-- Settings Button -->
-    <button id="settings-btn" onclick="toggleSettings()">CONFIGURE COMMANDS</button>
+    <button id="toggle-panel-btn" onclick="app.ui.togglePanel()">CONTROL PANEL</button>
 
-    <!-- Settings Panel -->
-    <div id="settings-panel">
-        <h3 style="color: #0ff; margin-top: 0;">COMMAND CONFIG</h3>
-
-        <div class="setting-row">
-            <span class="setting-label">1 FINGER (BLUE)</span>
-            <input type="text" id="cmd-1" class="setting-input" value="Hello" oninput="updateCommand(1, this.value)">
+    <!-- Control Panel -->
+    <div id="control-panel" style="display:none;">
+        <div class="panel-header">
+            <button class="tab-btn active" onclick="app.ui.switchTab('general')">GENERAL</button>
+            <button class="tab-btn" onclick="app.ui.switchTab('welcome')">WELCOME WALL</button>
+            <button class="tab-btn" onclick="app.ui.switchTab('lottery')">LOTTERY</button>
+            <button class="tab-btn" onclick="app.ui.switchTab('voting')">VOTING</button>
         </div>
 
-        <div class="setting-row">
-            <span class="setting-label">2 FINGERS (YELLOW)</span>
-            <input type="text" id="cmd-2" class="setting-input" value="Gemini3" oninput="updateCommand(2, this.value)">
-        </div>
+        <div class="panel-content">
+            <!-- General Tab -->
+            <div id="tab-general" class="tab-content active">
+                <div class="setting-row">
+                    <span class="setting-label">1 Finger Text</span>
+                    <input type="text" class="setting-input" id="cmd-1" oninput="app.config.updateCmd(1, this.value)">
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">2 Fingers Text</span>
+                    <input type="text" class="setting-input" id="cmd-2" oninput="app.config.updateCmd(2, this.value)">
+                </div>
+                 <div class="setting-row">
+                    <span class="setting-label">3 Fingers Text</span>
+                    <input type="text" class="setting-input" id="cmd-3" oninput="app.config.updateCmd(3, this.value)">
+                </div>
+                 <div class="setting-row">
+                    <span class="setting-label">4 Fingers Text</span>
+                    <input type="text" class="setting-input" id="cmd-4" oninput="app.config.updateCmd(4, this.value)">
+                </div>
+            </div>
 
-        <div class="setting-row">
-            <span class="setting-label">3 FINGERS (PINK)</span>
-            <input type="text" id="cmd-3" class="setting-input" value="非常好用" oninput="updateCommand(3, this.value)">
-        </div>
+            <!-- Welcome Tab -->
+            <div id="tab-welcome" class="tab-content">
+                <div class="setting-row">
+                    <span class="setting-label">Welcome Message</span>
+                    <input type="text" class="setting-input" id="welcome-msg" value="WELCOME" oninput="app.config.set('welcomeMsg', this.value)">
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">Logo Upload (Image)</span>
+                    <input type="file" class="setting-input" id="logo-upload" accept="image/*" onchange="app.particleSystem.loadLogo(this)">
+                </div>
+            </div>
 
-        <div class="setting-row">
-            <span class="setting-label">4 FINGERS (GREEN)</span>
-            <input type="text" id="cmd-4" class="setting-input" value="再见" oninput="updateCommand(4, this.value)">
-        </div>
+            <!-- Lottery Tab -->
+            <div id="tab-lottery" class="tab-content">
+                <div class="setting-row">
+                    <span class="setting-label">Prize List (One per line)</span>
+                    <textarea class="setting-textarea" id="lottery-list" oninput="app.config.set('lotteryList', this.value)">MacBook Pro
+iPhone 15
+Tesla Model 3
+Coffee Mug
+Paid Vacation</textarea>
+                </div>
+                <button class="setting-input" onclick="app.logic.triggerLotterySpin()">TEST SPIN</button>
+            </div>
 
-        <button class="close-btn" onclick="toggleSettings()">CLOSE</button>
+             <!-- Voting Tab -->
+            <div id="tab-voting" class="tab-content">
+                <div class="setting-row">
+                    <span class="setting-label">Option A (Key 'A')</span>
+                    <input type="text" class="setting-input" value="Option A" id="vote-a">
+                    <button class="setting-input" style="margin-top:5px" onclick="app.logic.triggerVote('A')">REVEAL OPTION A</button>
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">Option B (Key 'B')</span>
+                    <input type="text" class="setting-input" value="Option B" id="vote-b">
+                    <button class="setting-input" style="margin-top:5px" onclick="app.logic.triggerVote('B')">REVEAL OPTION B</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <video id="input-video"></video>
     <canvas id="text-canvas"></canvas>
+    <canvas id="image-canvas"></canvas>
 
 <script>
 /**
- * CYBERPUNK PARTICLE SYSTEM
- * Single File Implementation
+ * CYBER-EVENT TOOLKIT
+ * Modular Architecture
  */
 
-// --- CONFIGURATION ---
-const CONFIG = {
-    particleCount: 12000,
-    particleSize: 2.4,
-    lerpSpeed: 0.16,
-    repulsionRadius: 80,
-    repulsionForce: 5.0,
-    colors: {
-        blue: new THREE.Color(0x00FFFF),
-        yellow: new THREE.Color(0xFFFF00),
-        pink: new THREE.Color(0xFF00FF),
-        green: new THREE.Color(0x00FF88),
-        orange: new THREE.Color(0xFFA500),
-        white: new THREE.Color(0xFFFFFF)
-    },
-    cameraZ: 600,
-    canvasWidth: 800, // For text generation resolution
-    canvasHeight: 600,
-    commands: {
-        1: "Hello",
-        2: "Gemini3",
-        3: "非常好用",
-        4: "再见"
+// --- 1. CONFIG MANAGER ---
+class ConfigManager {
+    constructor() {
+        this.data = {
+            particleCount: 12000,
+            particleSize: 2.4,
+            lerpSpeed: 0.16,
+            repulsionRadius: 80,
+            repulsionForce: 5.0,
+            colors: {
+                blue: new THREE.Color(0x00FFFF),
+                yellow: new THREE.Color(0xFFFF00),
+                pink: new THREE.Color(0xFF00FF),
+                green: new THREE.Color(0x00FF88),
+                orange: new THREE.Color(0xFFA500),
+                white: new THREE.Color(0xFFFFFF),
+                red: new THREE.Color(0xFF0000)
+            },
+            commands: {
+                1: "Hello",
+                2: "Gemini3",
+                3: "非常好用",
+                4: "再见"
+            },
+            welcomeMsg: "WELCOME",
+            lotteryList: "Prize 1\nPrize 2\nPrize 3"
+        };
+        this.load();
     }
-};
 
-// --- GLOBAL STATE ---
-const state = {
-    leftHand: {
-        present: false,
-        fingers: 0,
-        position: new THREE.Vector3(), // Palm center
-        mode: 'IDLE' // IDLE, HELLO, GEMINI, USEFUL, BYE, CATCH
-    },
-    rightHand: {
-        present: false,
-        fingers: 0,
-        indexTip: new THREE.Vector3(),
-        position: new THREE.Vector3(), // Palm center
-        mode: 'POINT' // POINT, NEBULA
-    },
-    isUltimateMode: false,
-    time: 0,
-    activeColor: CONFIG.colors.blue
-};
-
-// --- THREE.JS SETUP ---
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.z = CONFIG.cameraZ;
-
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-// --- PARTICLE SYSTEM ---
-const particlesGeometry = new THREE.BufferGeometry();
-const posArray = new Float32Array(CONFIG.particleCount * 3);
-const targetArray = new Float32Array(CONFIG.particleCount * 3);
-const colorArray = new Float32Array(CONFIG.particleCount * 3);
-// For bouncing effect in ultimate mode
-const velocityArray = new Float32Array(CONFIG.particleCount * 3);
-const bouncePhaseArray = new Float32Array(CONFIG.particleCount); // Random phase for bouncing
-
-for (let i = 0; i < CONFIG.particleCount; i++) {
-    // Init at random positions
-    posArray[i * 3] = (Math.random() - 0.5) * 1000;
-    posArray[i * 3 + 1] = (Math.random() - 0.5) * 1000;
-    posArray[i * 3 + 2] = (Math.random() - 0.5) * 1000;
-
-    targetArray[i * 3] = posArray[i * 3];
-    targetArray[i * 3 + 1] = posArray[i * 3 + 1];
-    targetArray[i * 3 + 2] = posArray[i * 3 + 2];
-
-    const c = CONFIG.colors.blue;
-    colorArray[i * 3] = c.r;
-    colorArray[i * 3 + 1] = c.g;
-    colorArray[i * 3 + 2] = c.b;
-
-    velocityArray[i*3] = 0;
-    velocityArray[i*3+1] = 0;
-    velocityArray[i*3+2] = 0;
-
-    bouncePhaseArray[i] = Math.random() * Math.PI * 2;
-}
-
-particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
-
-// Procedural Circle Texture
-const getSprite = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 32;
-    canvas.height = 32;
-    const context = canvas.getContext('2d');
-    const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gradient.addColorStop(0, 'rgba(255,255,255,1)');
-    gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
-    gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 32, 32);
-    const texture = new THREE.CanvasTexture(canvas);
-    return texture;
-};
-
-const particlesMaterial = new THREE.PointsMaterial({
-    size: CONFIG.particleSize,
-    map: getSprite(),
-    transparent: true,
-    opacity: 0.9,
-    vertexColors: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-});
-
-const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
-scene.add(particlesMesh);
-
-// --- SHAPE GENERATION UTILS ---
-
-// 1. Text Generation
-const textCanvas = document.getElementById('text-canvas');
-textCanvas.width = CONFIG.canvasWidth;
-textCanvas.height = CONFIG.canvasHeight;
-const ctx = textCanvas.getContext('2d');
-
-function generateTextTargets(text) {
-    ctx.clearRect(0, 0, textCanvas.width, textCanvas.height);
-    ctx.fillStyle = '#000'; // BG
-    ctx.fillRect(0, 0, textCanvas.width, textCanvas.height);
-
-    ctx.font = 'bold 75px "Orbitron", "Courier New", monospace';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Split text into lines if needed or scale font, simple implementation for now
-    const lines = text.split('\n'); // Not really using newlines in prompt but good for safety
-    const lineHeight = 90;
-    const startY = (textCanvas.height - (lines.length - 1) * lineHeight) / 2;
-
-    lines.forEach((line, i) => {
-        ctx.fillText(line, textCanvas.width / 2, startY + i * lineHeight);
-    });
-
-    const imageData = ctx.getImageData(0, 0, textCanvas.width, textCanvas.height);
-    const data = imageData.data;
-
-    let validPixels = [];
-    for (let y = 0; y < textCanvas.height; y += 3) { // Step to reduce density
-        for (let x = 0; x < textCanvas.width; x += 3) {
-            const index = (y * textCanvas.width + x) * 4;
-            if (data[index] > 128) { // White pixel
-                // Map to 3D space.
-                // Canvas 0,0 is Top-Left. 3D 0,0 is Center.
-                const px = (x - textCanvas.width / 2) * 1.5;
-                const py = -(y - textCanvas.height / 2) * 1.5; // Invert Y
-                validPixels.push({ x: px, y: py, z: 0 });
-            }
+    load() {
+        const saved = localStorage.getItem('cyber_config');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Merge strictly
+            if(parsed.commands) this.data.commands = parsed.commands;
+            if(parsed.welcomeMsg) this.data.welcomeMsg = parsed.welcomeMsg;
+            if(parsed.lotteryList) this.data.lotteryList = parsed.lotteryList;
         }
+        // Initialize UI values
+        document.getElementById('cmd-1').value = this.data.commands[1];
+        document.getElementById('cmd-2').value = this.data.commands[2];
+        document.getElementById('cmd-3').value = this.data.commands[3];
+        document.getElementById('cmd-4').value = this.data.commands[4];
+        document.getElementById('welcome-msg').value = this.data.welcomeMsg;
+        document.getElementById('lottery-list').value = this.data.lotteryList;
     }
 
-    return validPixels;
-}
-
-// 2. Basketball Generation (Fibonacci Sphere with "cuts")
-function generateBasketballTargets() {
-    const points = [];
-    const radius = 100;
-    const phi = Math.PI * (3 - Math.sqrt(5)); // Golden angle
-
-    // We need roughly 12000 points, but let's generate enough to fill shape
-    // The main loop in update will map mod particleCount
-    const count = 6000;
-
-    for (let i = 0; i < count; i++) {
-        const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
-        const r = Math.sqrt(1 - y * y); // Radius at y
-
-        const theta = phi * i; // Golden angle increment
-
-        const x = Math.cos(theta) * r;
-        const z = Math.sin(theta) * r;
-
-        // Apply masking for "black lines"
-        // 1. One great circle (X-Z plane) -> y approx 0
-        // 2. One great circle (Y-Z plane) -> x approx 0
-        // 3. The sinusoidal curve is complex, let's approximate with a simple cross + band
-
-        const p = new THREE.Vector3(x * radius, y * radius, z * radius);
-
-        // Simple "Black Lines" logic: exclude points near specific geometric bands
-        // Standard basketball has one horizontal line and one vertical(ish) line + curves
-        // Lets just do a stylized version:
-        // Exclude if close to X=0 plane
-        // Exclude if close to Z=0 plane (rotated)
-
-        const lineThickness = 0.08;
-
-        // Line 1: x = 0
-        if (Math.abs(x) < lineThickness) continue;
-
-        // Line 2: Circle on ZY plane?
-        // Let's perform a generic "rib" check
-        // Sphere has ribs.
-
-        // Let's do a simple sine wave strip around sphere
-        // Check distance from a sine curve wrapped around sphere
-        // z = sin(x * freq) ... hard on sphere.
-
-        // Alternative: Just simple geometric exclusions for the "Cross" look
-        if (Math.abs(z) < lineThickness) continue;
-
-        points.push(p);
-    }
-    return points;
-}
-
-const basketballPoints = generateBasketballTargets();
-
-// --- LOGIC FUNCTIONS ---
-
-function updateParticlesTarget(mode, text = '') {
-    let validPoints = [];
-
-    if (mode === 'TEXT') {
-        validPoints = generateTextTargets(text);
-    } else if (mode === 'BASKETBALL') {
-        validPoints = basketballPoints;
+    save() {
+        localStorage.setItem('cyber_config', JSON.stringify({
+            commands: this.data.commands,
+            welcomeMsg: this.data.welcomeMsg,
+            lotteryList: this.data.lotteryList
+        }));
     }
 
-    // Assign targets
-    for (let i = 0; i < CONFIG.particleCount; i++) {
-        let p;
-        if (mode === 'NEBULA') {
-            // Random space
-            const range = 800;
-            targetArray[i * 3] = (Math.random() - 0.5) * range;
-            targetArray[i * 3 + 1] = (Math.random() - 0.5) * range;
-            targetArray[i * 3 + 2] = (Math.random() - 0.5) * range;
-        } else {
-            // Map validPoints to particles repeatedly
-            if (validPoints.length > 0) {
-                p = validPoints[i % validPoints.length];
-                targetArray[i * 3] = p.x;
-                targetArray[i * 3 + 1] = p.y;
-                targetArray[i * 3 + 2] = p.z || 0;
-            } else {
-                // Fallback (center)
-                targetArray[i * 3] = 0;
-                targetArray[i * 3 + 1] = 0;
-                targetArray[i * 3 + 2] = 0;
-            }
+    set(key, value) {
+        this.data[key] = value;
+        this.save();
+    }
+
+    updateCmd(finger, value) {
+        this.data.commands[finger] = value;
+        this.save();
+        if (app.input.state.leftHand.mode !== 'IDLE' && app.input.state.leftHand.fingers == finger) {
+            app.particleSystem.updateTargets('TEXT', value);
         }
     }
 }
 
-function updateColors(color) {
-    state.activeColor = color;
-    // We update the buffer in the animation loop usually, but can do gradual transition
-    // For instant switch (requested logic):
-    // Actually the request implies "Color: Neon Blue", etc.
-    // We will lerp colors in update loop for smoothness or set instantly?
-    // Let's set target color state and lerp in loop.
+// --- 2. SCENE MANAGER ---
+class SceneManager {
+    constructor() {
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+        this.camera.position.z = 600;
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(this.renderer.domElement);
+
+        window.addEventListener('resize', () => this.onResize());
+    }
+
+    onResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    render() {
+        this.renderer.render(this.scene, this.camera);
+    }
 }
 
-// --- MEDIAPIPE HANDS SETUP ---
+// --- 3. PARTICLE SYSTEM ---
+class ParticleSystem {
+    constructor(config, scene) {
+        this.config = config;
+        this.scene = scene;
+        this.count = config.particleCount;
 
-const videoElement = document.getElementById('input-video');
+        // Geometry
+        this.geometry = new THREE.BufferGeometry();
+        this.posArray = new Float32Array(this.count * 3);
+        this.targetArray = new Float32Array(this.count * 3);
+        this.colorArray = new Float32Array(this.count * 3);
+        this.bouncePhaseArray = new Float32Array(this.count);
 
-function onResults(results) {
-    // Reset Hand States
-    state.leftHand.present = false;
-    state.rightHand.present = false;
+        // Init
+        for(let i=0; i<this.count; i++) {
+            const i3 = i*3;
+            this.posArray[i3] = (Math.random()-0.5)*1000;
+            this.posArray[i3+1] = (Math.random()-0.5)*1000;
+            this.posArray[i3+2] = (Math.random()-0.5)*1000;
 
-    // Process Hands
-    if (results.multiHandLandmarks && results.multiHandedness) {
-        for (let index = 0; index < results.multiHandLandmarks.length; index++) {
-            const classification = results.multiHandedness[index];
-            const isRightHand = classification.label === 'Right'; // MediaPipe reverses?
-            // Note: Camera is mirrored usually?
-            // "Right" label in MediaPipe usually corresponds to user's left hand in mirrored view.
-            // But let's assume standard webcam mirror:
-            // If I raise my right hand, it appears on the right side of the screen (mirror).
-            // MediaPipe 'Right' label usually means the hand that IS the right hand.
-            // Let's map strictly to logic requested.
+            this.targetArray[i3] = this.posArray[i3];
+            this.targetArray[i3+1] = this.posArray[i3+1];
+            this.targetArray[i3+2] = this.posArray[i3+2];
 
-            const landmarks = results.multiHandLandmarks[index];
+            const c = this.config.colors.blue;
+            this.colorArray[i3] = c.r;
+            this.colorArray[i3+1] = c.g;
+            this.colorArray[i3+2] = c.b;
 
-            // Count fingers
-            let fingers = 0;
-            // Thumb (4 right of 3?) - simple check x diff
-            // For general robustness, use vector angle or simple x comparison relative to handedness
+            this.bouncePhaseArray[i] = Math.random() * Math.PI * 2;
+        }
 
-            // Simple logic: Tip y < PIP y (for fingers 2-5)
-            // Thumb: check x distance
+        this.geometry.setAttribute('position', new THREE.BufferAttribute(this.posArray, 3));
+        this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colorArray, 3));
 
-            // Index (8 vs 6), Middle (12 vs 10), Ring (16 vs 14), Pinky (20 vs 18)
-            if (landmarks[8].y < landmarks[6].y) fingers++;
-            if (landmarks[12].y < landmarks[10].y) fingers++;
-            if (landmarks[16].y < landmarks[14].y) fingers++;
-            if (landmarks[20].y < landmarks[18].y) fingers++;
+        // Material
+        this.material = new THREE.PointsMaterial({
+            size: this.config.particleSize,
+            map: this.getSprite(),
+            transparent: true,
+            opacity: 0.9,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
 
-            // Thumb
-            // Right Hand: Thumb is left of wrist?
-            // Let's use a simpler heuristic for thumb: distance from wrist vs index knuckle?
-            // Or just x comparison.
-            // For Right hand, thumb tip (4) < IP (3). x increases to left in MP coords (0-1)
-            // Let's just assume thumb is extended if tip is far from palm center
+        this.mesh = new THREE.Points(this.geometry, this.material);
+        this.scene.add(this.mesh);
 
-            // Rough Thumb check
-            const dx = landmarks[4].x - landmarks[3].x;
-            if (isRightHand) {
-                if (dx < -0.02) fingers++; // Adjust based on real world
-            } else {
-                if (dx > 0.02) fingers++;
+        // Utils
+        this.textCanvas = document.getElementById('text-canvas');
+        this.textCanvas.width = 800;
+        this.textCanvas.height = 600;
+        this.ctx = this.textCanvas.getContext('2d');
+
+        this.basketballPoints = this.generateBasketballPoints();
+        this.activeColor = this.config.colors.blue;
+    }
+
+    getSprite() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+        gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0,0,32,32);
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    generateBasketballPoints() {
+        const points = [];
+        const count = 6000;
+        const radius = 100;
+        const phi = Math.PI * (3 - Math.sqrt(5));
+        for(let i=0; i<count; i++) {
+            const y = 1 - (i / (count-1))*2;
+            const r = Math.sqrt(1-y*y);
+            const theta = phi * i;
+            const x = Math.cos(theta)*r;
+            const z = Math.sin(theta)*r;
+
+            // Rejection sampling for lines
+            const lineThickness = 0.08;
+            if(Math.abs(x) < lineThickness) continue;
+            if(Math.abs(z) < lineThickness) continue;
+
+            points.push(new THREE.Vector3(x*radius, y*radius, z*radius));
+        }
+        return points;
+    }
+
+    generateTextTargets(text) {
+        this.ctx.clearRect(0,0,800,600);
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0,0,800,600);
+        this.ctx.font = 'bold 75px "Orbitron"';
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+
+        const lines = text.split('\n');
+        const lineHeight = 90;
+        const startY = (600 - (lines.length-1)*lineHeight)/2;
+        lines.forEach((l,i) => this.ctx.fillText(l, 400, startY + i*lineHeight));
+
+        const data = this.ctx.getImageData(0,0,800,600).data;
+        const points = [];
+        for(let y=0; y<600; y+=3) {
+            for(let x=0; x<800; x+=3) {
+                if(data[(y*800+x)*4] > 128) {
+                    points.push({
+                        x: (x-400)*1.5,
+                        y: -(y-300)*1.5,
+                        z: 0
+                    });
+                }
             }
+        }
+        return points;
+    }
 
-            // 3D Position mapping (0-1) to World Coords
-            // Three.js Scene is approx -400 to 400 x, -300 to 300 y
-            // MP: x(0-1), y(0-1).
-            // Invert x for mirror effect
-            const wx = (1 - landmarks[9].x - 0.5) * CONFIG.canvasWidth * 1.5;
-            const wy = -(landmarks[9].y - 0.5) * CONFIG.canvasHeight * 1.5;
-            const palmPos = new THREE.Vector3(wx, wy, 0);
+    loadLogo(input) {
+        if(input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    this.logoPoints = this.generateImageTargets(img);
+                    this.updateTargets('LOGO');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
 
-            if (isRightHand) {
-                // Logic says "Right Hand (Physics Interactor)"
-                // But in mirror mode, my physical Right hand is on the right side of screen?
-                // MediaPipe says "Right" for the hand that is the user's Right hand.
-                state.rightHand.present = true;
-                state.rightHand.fingers = fingers;
-                state.rightHand.position.copy(palmPos);
+    generateImageTargets(img) {
+         // Re-use text canvas
+         this.ctx.clearRect(0,0,800,600);
+         // Scale to fit
+         const scale = Math.min(800/img.width, 600/img.height) * 0.8;
+         const w = img.width * scale;
+         const h = img.height * scale;
+         this.ctx.drawImage(img, 400-w/2, 300-h/2, w, h);
 
-                // Track Index Tip (Landmark 8)
-                const tipX = (1 - landmarks[8].x - 0.5) * CONFIG.canvasWidth * 1.5;
-                const tipY = -(landmarks[8].y - 0.5) * CONFIG.canvasHeight * 1.5;
-                state.rightHand.indexTip.set(tipX, tipY, 0);
+         const data = this.ctx.getImageData(0,0,800,600).data;
+         const points = [];
+         const step = 4; // optimization
+         for(let y=0; y<600; y+=step) {
+            for(let x=0; x<800; x+=step) {
+                const idx = (y*800+x)*4;
+                if(data[idx+3] > 128) { // Alpha check
+                    points.push({
+                        x: (x-400)*1.5,
+                        y: -(y-300)*1.5,
+                        z: 0,
+                        c: new THREE.Color(data[idx]/255, data[idx+1]/255, data[idx+2]/255)
+                    });
+                }
+            }
+         }
+         return points;
+    }
 
-                // Mode State
-                if (fingers === 5) {
-                    state.rightHand.mode = 'NEBULA';
+    updateTargets(mode, data) {
+        let points = [];
+        if(mode === 'TEXT') points = this.generateTextTargets(data);
+        else if(mode === 'BASKETBALL') points = this.basketballPoints;
+        else if(mode === 'LOGO' && this.logoPoints) points = this.logoPoints;
+
+        this.currentTargetMode = mode;
+
+        for(let i=0; i<this.count; i++) {
+            const i3 = i*3;
+            if(mode === 'NEBULA') {
+                this.targetArray[i3] = (Math.random()-0.5)*800;
+                this.targetArray[i3+1] = (Math.random()-0.5)*800;
+                this.targetArray[i3+2] = (Math.random()-0.5)*800;
+            } else {
+                if(points.length > 0) {
+                    const p = points[i % points.length];
+                    this.targetArray[i3] = p.x;
+                    this.targetArray[i3+1] = p.y;
+                    this.targetArray[i3+2] = p.z || 0;
+
+                    // If image mode, we might want to store per-particle color target too?
+                    // For now keeping single color unless explicit feature needed
                 } else {
-                    state.rightHand.mode = 'POINT';
+                     this.targetArray[i3] = 0; this.targetArray[i3+1] = 0; this.targetArray[i3+2] = 0;
                 }
+            }
+        }
+    }
 
-                document.getElementById('right-status').innerText = `${state.rightHand.mode} (${fingers})`;
+    setColors(color) {
+        this.activeColor = color;
+    }
 
+    update(time, handState) {
+        const positions = this.geometry.attributes.position.array;
+        const colors = this.geometry.attributes.color.array;
+
+        for(let i=0; i<this.count; i++) {
+            const i3 = i*3;
+            let px = positions[i3];
+            let py = positions[i3+1];
+            let pz = positions[i3+2];
+
+            let tx, ty, tz;
+
+            // --- TARGET LOGIC ---
+            if(handState.isUltimateMode) {
+                const p = this.basketballPoints[i % this.basketballPoints.length];
+                const angle = time * 2;
+                const rx = p.x * Math.cos(angle) - p.z * Math.sin(angle);
+                const rz = p.x * Math.sin(angle) + p.z * Math.cos(angle);
+
+                tx = handState.leftHand.position.x + rx;
+                ty = handState.leftHand.position.y + p.y;
+                tz = handState.leftHand.position.z + rz;
+
+                // Bounce
+                ty += Math.abs(Math.sin(time*5 + this.bouncePhaseArray[i])) * 50;
+            } else if (handState.rightHand.mode === 'NEBULA') {
+                tx = this.targetArray[i3];
+                ty = this.targetArray[i3+1];
+                tz = this.targetArray[i3+2];
+                // Ripple
+                if(handState.rightHand.present) {
+                    const dist = Math.sqrt(Math.pow(px - handState.rightHand.indexTip.x, 2) + Math.pow(py - handState.rightHand.indexTip.y, 2));
+                    pz += Math.sin(dist*0.05 - time*10) * 20;
+                }
             } else {
-                // Left Hand (Command Controller)
-                state.leftHand.present = true;
-                state.leftHand.fingers = fingers;
-                state.leftHand.position.copy(palmPos);
+                 tx = this.targetArray[i3];
+                 ty = this.targetArray[i3+1];
+                 tz = this.targetArray[i3+2];
+            }
 
-                let modeText = 'IDLE';
-                // Switch Logic
-                if (fingers === 0) {
-                    state.leftHand.mode = 'IDLE';
-                } else if (fingers === 1) {
-                    state.leftHand.mode = 'HELLO';
-                    modeText = CONFIG.commands[1];
-                } else if (fingers === 2) {
-                    state.leftHand.mode = 'GEMINI';
-                    modeText = CONFIG.commands[2];
-                } else if (fingers === 3) {
-                    state.leftHand.mode = 'USEFUL';
-                    modeText = CONFIG.commands[3];
-                } else if (fingers === 4) {
-                    state.leftHand.mode = 'BYE';
-                    modeText = CONFIG.commands[4];
-                } else if (fingers === 5) {
-                    state.leftHand.mode = 'CATCH';
-                    modeText = 'CATCH MODE';
+            // --- PHYSICS LERP ---
+            px += (tx - px) * this.config.lerpSpeed;
+            py += (ty - py) * this.config.lerpSpeed;
+            pz += (tz - pz) * this.config.lerpSpeed;
+
+            // --- INTERACTION (Right Hand Repulsion) ---
+            if(handState.rightHand.present && handState.rightHand.mode === 'POINT' && !handState.isUltimateMode) {
+                 const dx = px - handState.rightHand.indexTip.x;
+                 const dy = py - handState.rightHand.indexTip.y;
+                 const dist = Math.sqrt(dx*dx + dy*dy);
+                 if(dist < this.config.repulsionRadius) {
+                     const force = (this.config.repulsionRadius - dist) * this.config.repulsionForce;
+                     const angle = Math.atan2(dy, dx);
+                     px += Math.cos(angle) * force;
+                     py += Math.sin(angle) * force;
+                 }
+            }
+
+            positions[i3] = px; positions[i3+1] = py; positions[i3+2] = pz;
+
+            // --- COLOR ---
+            colors[i3] += (this.activeColor.r - colors[i3]) * 0.1;
+            colors[i3+1] += (this.activeColor.g - colors[i3+1]) * 0.1;
+            colors[i3+2] += (this.activeColor.b - colors[i3+2]) * 0.1;
+        }
+
+        this.geometry.attributes.position.needsUpdate = true;
+        this.geometry.attributes.color.needsUpdate = true;
+    }
+}
+
+// --- 4. INPUT CONTROLLER ---
+class InputController {
+    constructor() {
+        this.state = {
+            leftHand: { present: false, fingers: 0, position: new THREE.Vector3(), mode: 'IDLE' },
+            rightHand: { present: false, fingers: 0, indexTip: new THREE.Vector3(), position: new THREE.Vector3(), mode: 'POINT' },
+            isUltimateMode: false
+        };
+        this.initMediaPipe();
+        this.initKeyboard();
+    }
+
+    initMediaPipe() {
+        this.hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        this.hands.setOptions({maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+        this.hands.onResults((results) => this.onHandResults(results));
+
+        const video = document.getElementById('input-video');
+        const camera = new Camera(video, {
+            onFrame: async () => await this.hands.send({image: video}),
+            width: 640, height: 480
+        });
+        camera.start().then(() => document.getElementById('loading').style.display = 'none');
+    }
+
+    initKeyboard() {
+        window.addEventListener('keydown', (e) => this.onKeyDown(e));
+    }
+
+    onKeyDown(e) {
+        // Hybrid Controls - Map keys to states
+        // Space: Lottery Spin
+        // Enter: Lottery Reveal
+        if(e.code === 'Space') {
+            app.logic.triggerLotterySpin();
+        } else if (e.code === 'Enter') {
+            app.logic.triggerLotteryReveal();
+        }
+
+        // Voting Keys
+        if(e.key.toLowerCase() === 'a') app.logic.triggerVote('A');
+        if(e.key.toLowerCase() === 'b') app.logic.triggerVote('B');
+
+        // Numbers for Left Hand emulation
+        if(['0','1','2','3','4','5'].includes(e.key)) {
+            // Emulate Left Hand Logic? Or just direct overrides.
+            // Let's use it as direct mode triggers for now
+            // But hands usually override continuously.
+            // We need a "keyboard override" flag or just let frames overwrite it?
+            // Since onHandResults runs every frame, it will overwrite manual state.
+            // We'll handle key triggers in App Logic instead.
+            app.logic.handleKeyCommand(e.key);
+        }
+    }
+
+    onHandResults(results) {
+        this.state.leftHand.present = false;
+        this.state.rightHand.present = false;
+
+        if (results.multiHandLandmarks) {
+            for (let index = 0; index < results.multiHandLandmarks.length; index++) {
+                const landmarks = results.multiHandLandmarks[index];
+                const isRight = results.multiHandedness[index].label === 'Right';
+
+                // Fingers
+                let fingers = 0;
+                if (landmarks[8].y < landmarks[6].y) fingers++;
+                if (landmarks[12].y < landmarks[10].y) fingers++;
+                if (landmarks[16].y < landmarks[14].y) fingers++;
+                if (landmarks[20].y < landmarks[18].y) fingers++;
+                // Thumb rough check
+                const dx = landmarks[4].x - landmarks[3].x;
+                if (isRight ? (dx < -0.02) : (dx > 0.02)) fingers++;
+
+                // Coords
+                const wx = (1 - landmarks[9].x - 0.5) * 800 * 1.5;
+                const wy = -(landmarks[9].y - 0.5) * 600 * 1.5;
+                const palmPos = new THREE.Vector3(wx, wy, 0);
+
+                if (isRight) {
+                    this.state.rightHand.present = true;
+                    this.state.rightHand.fingers = fingers;
+                    this.state.rightHand.position.copy(palmPos);
+
+                    const tipX = (1 - landmarks[8].x - 0.5) * 800 * 1.5;
+                    const tipY = -(landmarks[8].y - 0.5) * 600 * 1.5;
+                    this.state.rightHand.indexTip.set(tipX, tipY, 0);
+                    this.state.rightHand.mode = (fingers === 5) ? 'NEBULA' : 'POINT';
+
+                    document.getElementById('right-status').innerText = `${this.state.rightHand.mode} (${fingers})`;
+                } else {
+                    this.state.leftHand.present = true;
+                    this.state.leftHand.fingers = fingers;
+                    this.state.leftHand.position.copy(palmPos);
+
+                    // Mode mapping
+                    const modes = ['IDLE', 'HELLO', 'GEMINI', 'USEFUL', 'BYE', 'CATCH'];
+                    this.state.leftHand.mode = modes[fingers] || 'IDLE';
+
+                    document.getElementById('left-status').innerText = `${this.state.leftHand.mode} (${fingers})`;
                 }
-
-                document.getElementById('left-status').innerText = `${modeText} (${fingers})`;
             }
         }
     }
 }
 
-const hands = new Hands({locateFile: (file) => {
-    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-}});
-hands.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-});
-hands.onResults(onResults);
-
-// Setup Camera
-const cameraUtils = new Camera(videoElement, {
-    onFrame: async () => {
-        await hands.send({image: videoElement});
-    },
-    width: 640,
-    height: 480
-});
-cameraUtils.start().then(() => {
-    document.getElementById('loading').style.display = 'none';
-});
-
-// --- MAIN LOOP ---
-
-let previousLeftMode = 'IDLE';
-let previousRightMode = 'POINT';
-let isUltimate = false;
-
-function updateLogic() {
-    state.time += 0.01;
-
-    // 1. Detect Modes & Switch Targets
-
-    // Left Hand Trigger
-    const leftMode = state.leftHand.present ? state.leftHand.mode : 'IDLE';
-
-    if (leftMode !== previousLeftMode) {
-        switch(leftMode) {
-            case 'HELLO':
-                updateParticlesTarget('TEXT', CONFIG.commands[1]);
-                updateColors(CONFIG.colors.blue);
-                break;
-            case 'GEMINI':
-                updateParticlesTarget('TEXT', CONFIG.commands[2]);
-                updateColors(CONFIG.colors.yellow);
-                break;
-            case 'USEFUL':
-                updateParticlesTarget('TEXT', CONFIG.commands[3]);
-                updateColors(CONFIG.colors.pink);
-                break;
-            case 'BYE':
-                updateParticlesTarget('TEXT', CONFIG.commands[4]);
-                updateColors(CONFIG.colors.green);
-                break;
-            case 'CATCH':
-                // Catch mode acts as destination container
-                // We keep targets as is? Or clear them?
-                // Logic says: "Enter Catch Mode (acts as a destination container)"
-                // This implies it's ready for Ultimate.
-                // Visually maybe show a ring or empty?
-                // Let's keep previous text but change color to White? Or keep logic simple.
-                // Let's set target to a small sphere in hand?
-                // Description implies Catch Mode is a state for Dual Hand Combo.
-                break;
-            case 'IDLE':
-                // Maybe disperse or keep last?
-                break;
-        }
-        previousLeftMode = leftMode;
+// --- 5. UI MANAGER ---
+class UIManager {
+    togglePanel() {
+        const p = document.getElementById('control-panel');
+        p.style.display = (p.style.display === 'none') ? 'flex' : 'none';
     }
 
-    // Right Hand Trigger
-    const rightMode = state.rightHand.present ? state.rightHand.mode : 'POINT';
-    if (rightMode !== previousRightMode) {
-        if (rightMode === 'NEBULA') {
-            updateParticlesTarget('NEBULA');
-            // Nebula interaction is ripple
-        } else {
-            // If returning to Point, do we restore text?
-            // If Left hand is still holding a state, restore it.
-            if (['HELLO', 'GEMINI', 'USEFUL', 'BYE'].includes(state.leftHand.mode)) {
-                // Re-trigger left hand logic
-                previousLeftMode = 'FORCE_UPDATE'; // Hack to re-trigger
-            }
-        }
-        previousRightMode = rightMode;
-    }
-
-    // Ultimate Trigger
-    // Condition: Right Open (Nebula) AND Left Open (Catch)
-    if (state.rightHand.present && state.rightHand.mode === 'NEBULA' &&
-        state.leftHand.present && state.leftHand.mode === 'CATCH') {
-
-        if (!state.isUltimateMode) {
-            state.isUltimateMode = true;
-            // Generate Basketball Targets once?
-            // Actually we just map basketball points in real-time to Left Hand position
-            updateColors(CONFIG.colors.orange);
-        }
-    } else {
-        state.isUltimateMode = false;
+    switchTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+        event.target.classList.add('active');
     }
 }
 
-function animate() {
-    requestAnimationFrame(animate);
+// --- 6. APP LOGIC (Controller) ---
+class App {
+    constructor() {
+        this.config = new ConfigManager();
+        this.scene = new SceneManager();
+        this.particleSystem = new ParticleSystem(this.config.data, this.scene.scene);
+        this.input = new InputController();
+        this.ui = new UIManager();
+        this.logic = new AppLogic(this);
 
-    // Update FPS
-    document.getElementById('fps').innerText = Math.round(1 / (performance.now() - (animate.lastTime || performance.now())) * 1000) || 60;
-    animate.lastTime = performance.now();
+        this.time = 0;
+        this.animate();
+    }
 
-    updateLogic();
+    animate() {
+        requestAnimationFrame(() => this.animate());
+        this.time += 0.01;
 
-    const positions = particlesGeometry.attributes.position.array;
-    const colors = particlesGeometry.attributes.color.array;
+        // Update Logic
+        this.logic.update();
 
-    // Physics Loop
-    for (let i = 0; i < CONFIG.particleCount; i++) {
-        const ix = i * 3;
-        const iy = i * 3 + 1;
-        const iz = i * 3 + 2;
+        // Update Particles
+        this.particleSystem.update(this.time, this.input.state);
 
-        let px = positions[ix];
-        let py = positions[iy];
-        let pz = positions[iz];
+        // Render
+        // Camera drift
+        this.scene.camera.position.x += (this.input.state.rightHand.position.x * 0.05 - this.scene.camera.position.x) * 0.05;
+        this.scene.camera.position.y += (this.input.state.rightHand.position.y * 0.05 - this.scene.camera.position.y) * 0.05;
+        this.scene.camera.lookAt(this.scene.scene.position);
 
-        let tx, ty, tz;
+        this.scene.render();
 
-        // TARGET CALCULATION
-        if (state.isUltimateMode) {
-            // ULTIMATE: Target is Basketball shape relative to Left Hand Position
-            const p = basketballPoints[i % basketballPoints.length];
-            // Rotate the ball
-            const angle = state.time * 2;
-            const rx = p.x * Math.cos(angle) - p.z * Math.sin(angle);
-            const rz = p.x * Math.sin(angle) + p.z * Math.cos(angle);
+        // FPS
+        document.getElementById('fps').innerText = Math.round(1 / (performance.now() - (this.lastTime || performance.now())) * 1000) || 60;
+        this.lastTime = performance.now();
+    }
+}
 
-            tx = state.leftHand.position.x + rx;
-            ty = state.leftHand.position.y + p.y;
-            tz = state.leftHand.position.z + rz;
+class AppLogic {
+    constructor(app) {
+        this.app = app;
+        this.previousLeftMode = 'IDLE';
+        this.lotteryState = 'IDLE'; // IDLE, SPINNING, REVEALED
+        this.lotteryTimer = null;
+    }
 
-            // Bouncing Trajectory Logic
-            // "High-frequency Y-axis sine wave" looking like bouncing beads
-            // Add a sine wave offset to the path?
-            // Or act as velocity?
-            // The prompt says "Particles must fly towards... with Bouncing/Jumping trajectory"
-            // We can add a sine wave to the current position's Y based on distance to target?
+    update() {
+        const left = this.app.input.state.leftHand;
+        const right = this.app.input.state.rightHand;
+        const ps = this.app.particleSystem;
+        const cfg = this.app.config.data;
 
-            // Simpler visual: Add sine wave to Y based on time + particle index
-            const bounce = Math.abs(Math.sin(state.time * 5 + bouncePhaseArray[i])) * 50;
-            ty += bounce;
+        // 1. Hand Triggers
+        if(left.present && left.mode !== this.previousLeftMode) {
+             if(left.mode === 'HELLO') { ps.updateTargets('TEXT', cfg.commands[1]); ps.setColors(cfg.colors.blue); }
+             else if(left.mode === 'GEMINI') { ps.updateTargets('TEXT', cfg.commands[2]); ps.setColors(cfg.colors.yellow); }
+             else if(left.mode === 'USEFUL') { ps.updateTargets('TEXT', cfg.commands[3]); ps.setColors(cfg.colors.pink); }
+             else if(left.mode === 'BYE') { ps.updateTargets('TEXT', cfg.commands[4]); ps.setColors(cfg.colors.green); }
+             else if(left.mode === 'CATCH') { /* catch logic */ }
+             this.previousLeftMode = left.mode;
+        }
 
-        } else if (state.rightHand.mode === 'NEBULA') {
-            // NEBULA: Target is random (set in updateParticlesTarget)
-            // But we add Ripple Effect from Right Hand
-            tx = targetArray[ix];
-            ty = targetArray[iy];
-            tz = targetArray[iz];
-
-            if (state.rightHand.present) {
-                const dist = Math.sqrt(
-                    Math.pow(px - state.rightHand.indexTip.x, 2) +
-                    Math.pow(py - state.rightHand.indexTip.y, 2) +
-                    Math.pow(pz - 0, 2) // Hand assumed at z=0 for interaction
-                );
-
-                // Sine wave ripple
-                const ripple = Math.sin(dist * 0.05 - state.time * 10) * 20;
-                pz += ripple; // Displace in Z
+        // 2. Ultimate Logic
+        if(right.present && right.mode === 'NEBULA' && left.present && left.mode === 'CATCH') {
+            if(!this.app.input.state.isUltimateMode) {
+                this.app.input.state.isUltimateMode = true;
+                ps.setColors(cfg.colors.orange);
             }
         } else {
-            // STANDARD (Text/Idle)
-            tx = targetArray[ix];
-            ty = targetArray[iy];
-            tz = targetArray[iz];
+            this.app.input.state.isUltimateMode = false;
         }
 
-        // LERP PHYSICS
-        // Move current pos towards target
-        px += (tx - px) * CONFIG.lerpSpeed;
-        py += (ty - py) * CONFIG.lerpSpeed;
-        pz += (tz - pz) * CONFIG.lerpSpeed;
+        // 3. Lottery Animation
+        if(this.lotteryState === 'SPINNING') {
+             // Randomly flash names
+             if(Math.random() > 0.8) {
+                 const list = cfg.lotteryList.split('\n');
+                 const name = list[Math.floor(Math.random() * list.length)];
+                 ps.updateTargets('TEXT', name);
+                 ps.setColors(new THREE.Color(Math.random(), Math.random(), Math.random()));
+             }
+        }
+    }
 
-        // RIGHT HAND INTERACTION (REPULSION) - State A
-        // "Constraint: Pure planar repulsion (XY axis). Do NOT apply any Z-axis bulge"
-        if (state.rightHand.present && state.rightHand.mode === 'POINT' && !state.isUltimateMode) {
-            const dx = px - state.rightHand.indexTip.x;
-            const dy = py - state.rightHand.indexTip.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+    handleKeyCommand(key) {
+        const ps = this.app.particleSystem;
+        const cfg = this.app.config.data;
+        if(key === '1') { ps.updateTargets('TEXT', cfg.commands[1]); ps.setColors(cfg.colors.blue); }
+        if(key === '2') { ps.updateTargets('TEXT', cfg.commands[2]); ps.setColors(cfg.colors.yellow); }
+        if(key === '3') { ps.updateTargets('TEXT', cfg.commands[3]); ps.setColors(cfg.colors.pink); }
+        if(key === '4') { ps.updateTargets('TEXT', cfg.commands[4]); ps.setColors(cfg.colors.green); }
+        if(key === '0') { ps.updateTargets('NEBULA'); ps.setColors(cfg.colors.white); }
+    }
 
-            if (dist < CONFIG.repulsionRadius) {
-                const force = (CONFIG.repulsionRadius - dist) * CONFIG.repulsionForce;
-                const angle = Math.atan2(dy, dx);
-                px += Math.cos(angle) * force;
-                py += Math.sin(angle) * force;
-                // No Z change
-            }
+    triggerLotterySpin() {
+        if(this.lotteryState === 'SPINNING') return;
+        this.lotteryState = 'SPINNING';
+        this.app.particleSystem.updateTargets('NEBULA'); // Disperse first? Or keep flashing
+        document.getElementById('mode-display').innerText = "MODE: LOTTERY SPIN";
+    }
+
+    triggerLotteryReveal() {
+        if(this.lotteryState !== 'SPINNING') return;
+        this.lotteryState = 'REVEALED';
+        const list = this.app.config.data.lotteryList.split('\n');
+        const winner = list[Math.floor(Math.random() * list.length)];
+
+        this.app.particleSystem.updateTargets('TEXT', winner);
+        this.app.particleSystem.setColors(this.app.config.data.colors.red);
+        document.getElementById('mode-display').innerText = "WINNER: " + winner;
+    }
+
+    triggerVote(option) {
+        let text = "";
+        let color = null;
+        if(option === 'A') {
+            text = document.getElementById('vote-a').value;
+            color = this.app.config.data.colors.blue;
+        } else if(option === 'B') {
+            text = document.getElementById('vote-b').value;
+            color = this.app.config.data.colors.yellow;
         }
 
-        positions[ix] = px;
-        positions[iy] = py;
-        positions[iz] = pz;
-
-        // COLOR LERP
-        // Smoothly transition color to activeColor
-        const cr = colors[ix];
-        const cg = colors[iy];
-        const cb = colors[iz];
-
-        colors[ix] += (state.activeColor.r - cr) * 0.1;
-        colors[iy] += (state.activeColor.g - cg) * 0.1;
-        colors[iz] += (state.activeColor.b - cb) * 0.1;
-    }
-
-    particlesGeometry.attributes.position.needsUpdate = true;
-    particlesGeometry.attributes.color.needsUpdate = true;
-
-    // Slight camera drift for liveliness
-    camera.position.x += (state.rightHand.position.x * 0.05 - camera.position.x) * 0.05;
-    camera.position.y += (state.rightHand.position.y * 0.05 - camera.position.y) * 0.05;
-    camera.lookAt(scene.position);
-
-    renderer.render(scene, camera);
-}
-
-// Handle Window Resize
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// Start Animation
-animate();
-
-// --- SETTINGS UI LOGIC ---
-function toggleSettings() {
-    const panel = document.getElementById('settings-panel');
-    if (panel.style.display === 'block') {
-        panel.style.display = 'none';
-    } else {
-        panel.style.display = 'block';
+        if(text) {
+            this.app.particleSystem.updateTargets('TEXT', text);
+            this.app.particleSystem.setColors(color);
+            document.getElementById('mode-display').innerText = "VOTE REVEAL: " + option;
+        }
     }
 }
 
-function updateCommand(finger, value) {
-    CONFIG.commands[finger] = value;
-    // Force update if currently in that state
-    if (state.leftHand.mode !== 'IDLE' && state.leftHand.fingers == finger) {
-        updateParticlesTarget('TEXT', value);
-    }
-}
+// Start
+const app = new App();
 
 </script>
 </body>
