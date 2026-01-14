@@ -656,6 +656,46 @@ class InputController {
         }
     }
 
+    _processHand(landmarks, isRight) {
+        // Fingers
+        let fingers = 0;
+        if (landmarks[8].y < landmarks[6].y) fingers++;
+        if (landmarks[12].y < landmarks[10].y) fingers++;
+        if (landmarks[16].y < landmarks[14].y) fingers++;
+        if (landmarks[20].y < landmarks[18].y) fingers++;
+        // Thumb rough check
+        const dx = landmarks[4].x - landmarks[3].x;
+        if (isRight ? (dx < -0.02) : (dx > 0.02)) fingers++;
+
+        // Coords
+        const wx = (1 - landmarks[9].x - 0.5) * 800 * 1.5;
+        const wy = -(landmarks[9].y - 0.5) * 600 * 1.5;
+        const palmPos = new THREE.Vector3(wx, wy, 0);
+
+        if (isRight) {
+            this.state.rightHand.present = true;
+            this.state.rightHand.fingers = fingers;
+            this.state.rightHand.position.copy(palmPos);
+
+            const tipX = (1 - landmarks[8].x - 0.5) * 800 * 1.5;
+            const tipY = -(landmarks[8].y - 0.5) * 600 * 1.5;
+            this.state.rightHand.indexTip.set(tipX, tipY, 0);
+            this.state.rightHand.mode = (fingers === 5) ? 'NEBULA' : 'POINT';
+
+            document.getElementById('right-status').innerText = `${this.state.rightHand.mode} (${fingers})`;
+        } else {
+            this.state.leftHand.present = true;
+            this.state.leftHand.fingers = fingers;
+            this.state.leftHand.position.copy(palmPos);
+
+            // Mode mapping
+            const modes = ['IDLE', 'HELLO', 'GEMINI', 'USEFUL', 'BYE', 'CATCH'];
+            this.state.leftHand.mode = modes[fingers] || 'IDLE';
+
+            document.getElementById('left-status').innerText = `${this.state.leftHand.mode} (${fingers})`;
+        }
+    }
+
     onHandResults(results) {
         this.state.leftHand.present = false;
         this.state.rightHand.present = false;
@@ -664,44 +704,7 @@ class InputController {
             for (let index = 0; index < results.multiHandLandmarks.length; index++) {
                 const landmarks = results.multiHandLandmarks[index];
                 const isRight = results.multiHandedness[index].label === 'Right';
-
-                // Fingers
-                let fingers = 0;
-                if (landmarks[8].y < landmarks[6].y) fingers++;
-                if (landmarks[12].y < landmarks[10].y) fingers++;
-                if (landmarks[16].y < landmarks[14].y) fingers++;
-                if (landmarks[20].y < landmarks[18].y) fingers++;
-                // Thumb rough check
-                const dx = landmarks[4].x - landmarks[3].x;
-                if (isRight ? (dx < -0.02) : (dx > 0.02)) fingers++;
-
-                // Coords
-                const wx = (1 - landmarks[9].x - 0.5) * 800 * 1.5;
-                const wy = -(landmarks[9].y - 0.5) * 600 * 1.5;
-                const palmPos = new THREE.Vector3(wx, wy, 0);
-
-                if (isRight) {
-                    this.state.rightHand.present = true;
-                    this.state.rightHand.fingers = fingers;
-                    this.state.rightHand.position.copy(palmPos);
-
-                    const tipX = (1 - landmarks[8].x - 0.5) * 800 * 1.5;
-                    const tipY = -(landmarks[8].y - 0.5) * 600 * 1.5;
-                    this.state.rightHand.indexTip.set(tipX, tipY, 0);
-                    this.state.rightHand.mode = (fingers === 5) ? 'NEBULA' : 'POINT';
-
-                    document.getElementById('right-status').innerText = `${this.state.rightHand.mode} (${fingers})`;
-                } else {
-                    this.state.leftHand.present = true;
-                    this.state.leftHand.fingers = fingers;
-                    this.state.leftHand.position.copy(palmPos);
-
-                    // Mode mapping
-                    const modes = ['IDLE', 'HELLO', 'GEMINI', 'USEFUL', 'BYE', 'CATCH'];
-                    this.state.leftHand.mode = modes[fingers] || 'IDLE';
-
-                    document.getElementById('left-status').innerText = `${this.state.leftHand.mode} (${fingers})`;
-                }
+                this._processHand(landmarks, isRight);
             }
         }
     }
@@ -874,4 +877,3 @@ const app = new App();
 </script>
 </body>
 </html>
-// TODO: Implement Sound Effects System
