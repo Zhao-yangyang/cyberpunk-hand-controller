@@ -134,6 +134,13 @@
             <!-- General Tab -->
             <div id="tab-general" class="tab-content active">
                 <div class="setting-row">
+                    <span class="setting-label">Hand Mapping</span>
+                    <label style="color:#fff; display:flex; align-items:center; cursor:pointer;">
+                        <input type="checkbox" id="swap-hands" onchange="app.config.set('swapHands', this.checked)" style="margin-right:10px;">
+                        Swap Left/Right Hands
+                    </label>
+                </div>
+                <div class="setting-row">
                     <span class="setting-label">1 Finger Text</span>
                     <input type="text" class="setting-input" id="cmd-1" oninput="app.config.updateCmd(1, this.value)">
                 </div>
@@ -227,6 +234,7 @@ class ConfigManager {
                 4: "再见"
             },
             welcomeMsg: "WELCOME",
+            swapHands: false,
             lotteryList: "Prize 1\nPrize 2\nPrize 3"
         };
         this.load();
@@ -240,6 +248,7 @@ class ConfigManager {
             if(parsed.commands) this.data.commands = parsed.commands;
             if(parsed.welcomeMsg) this.data.welcomeMsg = parsed.welcomeMsg;
             if(parsed.lotteryList) this.data.lotteryList = parsed.lotteryList;
+            if(parsed.swapHands !== undefined) this.data.swapHands = parsed.swapHands;
         }
         // Initialize UI values
         document.getElementById('cmd-1').value = this.data.commands[1];
@@ -248,13 +257,15 @@ class ConfigManager {
         document.getElementById('cmd-4').value = this.data.commands[4];
         document.getElementById('welcome-msg').value = this.data.welcomeMsg;
         document.getElementById('lottery-list').value = this.data.lotteryList;
+        document.getElementById('swap-hands').checked = this.data.swapHands;
     }
 
     save() {
         localStorage.setItem('cyber_config', JSON.stringify({
             commands: this.data.commands,
             welcomeMsg: this.data.welcomeMsg,
-            lotteryList: this.data.lotteryList
+            lotteryList: this.data.lotteryList,
+            swapHands: this.data.swapHands
         }));
     }
 
@@ -656,23 +667,34 @@ class InputController {
         }
     }
 
-    _processHand(landmarks, isRight) {
-        // Fingers
+    _processHand(landmarks, isLogicalRight, isPhysicalRight) {
+        // Helper: Calculate 2D distance between two landmarks
+        const getDist = (i, j) => {
+            const dx = landmarks[i].x - landmarks[j].x;
+            const dy = landmarks[i].y - landmarks[j].y;
+            return Math.sqrt(dx*dx + dy*dy);
+        };
+
+        // Robust Finger Counting (Orientation Independent)
         let fingers = 0;
-        if (landmarks[8].y < landmarks[6].y) fingers++;
-        if (landmarks[12].y < landmarks[10].y) fingers++;
-        if (landmarks[16].y < landmarks[14].y) fingers++;
-        if (landmarks[20].y < landmarks[18].y) fingers++;
-        // Thumb rough check
-        const dx = landmarks[4].x - landmarks[3].x;
-        if (isRight ? (dx < -0.02) : (dx > 0.02)) fingers++;
+
+        // Thumb: Check if Tip(4) is further from Pinky Knuckle(17) than the IP joint(3)
+        // This indicates the thumb is extended OUTWARDS, regardless of hand rotation.
+        if (getDist(4, 17) > getDist(3, 17)) fingers++;
+
+        // Fingers 2-5: Check if Tip is further from Wrist(0) than the PIP joint (knuckle)
+        // This works even if the hand is upside down or sideways.
+        if (getDist(8, 0) > getDist(6, 0)) fingers++;   // Index
+        if (getDist(12, 0) > getDist(10, 0)) fingers++; // Middle
+        if (getDist(16, 0) > getDist(14, 0)) fingers++; // Ring
+        if (getDist(20, 0) > getDist(18, 0)) fingers++; // Pinky
 
         // Coords
         const wx = (1 - landmarks[9].x - 0.5) * 800 * 1.5;
         const wy = -(landmarks[9].y - 0.5) * 600 * 1.5;
         const palmPos = new THREE.Vector3(wx, wy, 0);
 
-        if (isRight) {
+        if (isLogicalRight) {
             this.state.rightHand.present = true;
             this.state.rightHand.fingers = fingers;
             this.state.rightHand.position.copy(palmPos);
@@ -703,8 +725,19 @@ class InputController {
         if (results.multiHandLandmarks) {
             for (let index = 0; index < results.multiHandLandmarks.length; index++) {
                 const landmarks = results.multiHandLandmarks[index];
-                const isRight = results.multiHandedness[index].label === 'Right';
-                this._processHand(landmarks, isRight);
+                const label = results.multiHandedness[index].label;
+
+                // 1. Determine Physical Hand (for default logic)
+                // In selfie mode: Label 'Left' = User's Right Hand.
+                const isPhysicalRight = (label === 'Left');
+
+                // 2. Apply Logical Swap
+                let isLogicalRight = isPhysicalRight;
+                if (app.config.data.swapHands) {
+                    isLogicalRight = !isLogicalRight;
+                }
+
+                this._processHand(landmarks, isLogicalRight, isPhysicalRight);
             }
         }
     }
