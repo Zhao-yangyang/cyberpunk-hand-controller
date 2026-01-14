@@ -552,7 +552,11 @@ class ParticleSystem {
                 tz = this.targetArray[i3+2];
                 // Ripple
                 if(handState.rightHand.present) {
-                    const dist = Math.sqrt(Math.pow(px - handState.rightHand.indexTip.x, 2) + Math.pow(py - handState.rightHand.indexTip.y, 2));
+                    const dist = Math.sqrt(
+                        Math.pow(px - handState.rightHand.indexTip.x, 2) +
+                        Math.pow(py - handState.rightHand.indexTip.y, 2) +
+                        Math.pow(pz - 0, 2)
+                    );
                     pz += Math.sin(dist*0.05 - time*10) * 20;
                 }
             } else {
@@ -760,6 +764,7 @@ class AppLogic {
     constructor(app) {
         this.app = app;
         this.previousLeftMode = 'IDLE';
+        this.previousRightMode = 'POINT'; // Added track for right hand
         this.lotteryState = 'IDLE'; // IDLE, SPINNING, REVEALED
         this.lotteryTimer = null;
     }
@@ -770,7 +775,7 @@ class AppLogic {
         const ps = this.app.particleSystem;
         const cfg = this.app.config.data;
 
-        // 1. Hand Triggers
+        // 1. Left Hand Triggers
         if(left.present && left.mode !== this.previousLeftMode) {
              if(left.mode === 'HELLO') { ps.updateTargets('TEXT', cfg.commands[1]); ps.setColors(cfg.colors.blue); }
              else if(left.mode === 'GEMINI') { ps.updateTargets('TEXT', cfg.commands[2]); ps.setColors(cfg.colors.yellow); }
@@ -780,7 +785,21 @@ class AppLogic {
              this.previousLeftMode = left.mode;
         }
 
-        // 2. Ultimate Logic
+        // 2. Right Hand Triggers (Nebula Mode)
+        const rightMode = right.present ? right.mode : 'POINT';
+        if(rightMode !== this.previousRightMode) {
+            if(rightMode === 'NEBULA') {
+                ps.updateTargets('NEBULA');
+            } else {
+                // If returning from Nebula, restore left hand state if active
+                if(left.present && left.mode !== 'IDLE') {
+                    this.previousLeftMode = 'FORCE_UPDATE';
+                }
+            }
+            this.previousRightMode = rightMode;
+        }
+
+        // 3. Ultimate Logic
         if(right.present && right.mode === 'NEBULA' && left.present && left.mode === 'CATCH') {
             if(!this.app.input.state.isUltimateMode) {
                 this.app.input.state.isUltimateMode = true;
